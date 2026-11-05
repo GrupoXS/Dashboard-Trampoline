@@ -434,3 +434,18 @@ goil --target=posix/linux --templates=../../../goil/templates/ one_task.oil
 ---
 
 **Recomendação de execução:** comece pela Etapa 1 e só avance depois de compilar e executar `one_task`. Isso reduz o risco de desenvolver a aplicação e o dashboard antes de descobrir algum problema de ambiente ou toolchain.
+
+## Aplicação web de demonstração (cluster)
+
+O repositório também contém um painel web de demonstração de telemetria veicular em `cluster/`. Ele requer Node.js 20 ou superior e não precisa instalar dependências.
+
+Na raiz do repositório, execute:
+
+```sh
+cd cluster
+npm start
+```
+
+Abra <http://localhost:3000>. Para rodar os testes, use `npm test` na pasta `cluster/`. A API e as opções de configuração estão documentadas em [cluster/README.md](cluster/README.md).
+
+> O painel web é apenas uma simulação visual; não é um instrumento de condução real.
