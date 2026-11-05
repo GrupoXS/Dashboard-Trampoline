@@ -1,0 +1,24 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VOLT · Cluster elétrico</title><link rel="stylesheet" href="/style.css"></head><body>
+<header><a class="brand" href="/">VOLT<span>DRIVE INTERFACE / 01</span></a><div class="status"><i id="dot"></i><span id="connection">Conectando</span><time id="clock"></time></div></header>
+<main><div class="topline"><span>PURE ELECTRIC</span><span id="outside">24° EXTERIOR</span></div>
+<section class="cluster" aria-label="Painel veicular"><aside class="energy"><span class="eyebrow">ENERGIA DISPONÍVEL</span><h2><span id="battery">82</span><small>%</small></h2><div class="battery-track"><div id="batteryBar"></div></div><p><span id="range">328</span> km <span class="muted">de autonomia</span></p><div class="submetric"><span class="eyebrow">CONSUMO INSTANTÂNEO</span><h3><span id="power">0</span> <small>kW</small></h3><span id="powerLabel" class="mint">Em repouso</span></div></aside>
+<div class="speedometer"><div class="arrows"><span id="left">◀</span><span id="right">▶</span></div><div class="speed" id="speed">0</div><div class="unit">km/h</div><div class="gears" aria-label="Marcha"><span>P</span><span>R</span><span>N</span><span>D</span><span>B</span></div><div class="road"><div></div><svg viewBox="0 0 60 100" aria-label="Veículo"><rect x="12" y="5" width="36" height="88" rx="14" fill="#c7e9e4"/><path d="M17 28 L43 28 L40 47 L20 47 Z" fill="#193b39"/><path d="M20 65 L40 65 L43 78 L17 78 Z" fill="#193b39"/></svg></div></div>
+<aside class="journey"><span class="eyebrow">ESTADO DO VEÍCULO</span><div class="vehicle-state" id="vehicleState">Pronto para partir</div><p class="muted">Propulsão 100% elétrica</p><div class="indicators"><span id="lights">Faróis</span><span id="seatbelt">Cinto</span><span id="warning">Alerta</span></div><div class="submetric"><span class="eyebrow">ODÔMETRO</span><h3><span id="odometer">12.480</span> <small>km</small></h3></div></aside></section>
+<div class="power-scale"><span>REGEN</span><div><i id="powerBar"></i></div><span>POWER</span></div>
+<footer><span id="freshness">Aguardando telemetria</span><span>VOLT OS <b>1.0</b></span></footer></main>
+<section class="console"><div><span class="eyebrow">TELEMETRIA EM TEMPO REAL</span><p id="modeText">Conecte sua fonte de dados via HTTP.</p></div><div class="actions"><button id="demo">Iniciar demonstração</button><button id="integration">Integração HTTP ↗</button><button id="fullscreen" aria-label="Tela cheia">⛶</button></div></section>
+<dialog id="docs"><button id="close" class="close">Fechar ✕</button><h2>Conecte seu veículo.</h2><p>Envie um POST com JSON. Campos omitidos mantêm o valor anterior.</p><pre>POST /api/telemetry
+Content-Type: application/json
+Authorization: Bearer SUA_CHAVE
+
+{
+  "speed": 88,
+  "power": 42,
+  "battery": 76,
+  "range": 304,
+  "gear": "D",
+  "temperature": 25,
+  "odometer": 12481,
+  "lights": true
+}</pre><p>A chave é configurada no servidor. A demonstração altera apenas esta tela. Consulte README.md para acesso pela internet.</p></dialog>
+<script src="/app.js"></script></body></html>
