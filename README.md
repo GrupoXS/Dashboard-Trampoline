@@ -1,12 +1,40 @@
 # Projeto 2 — Automotive Dashboard com Trampoline RTOS
 
+## Rodar localmente (localhost)
+
+Requisitos: Node.js 20 ou superior. Para executar também o simulador C, use Linux/macOS ou WSL2 com `make` e um compilador C (`cc`/`gcc`). Não é necessário instalar pacotes npm.
+
+**Terminal 1 — servidor e front VOLT:**
+
+```sh
+cd cluster
+API_KEY=local-demo-key npm start
+```
+
+Abra <http://localhost:3000>. Mantenha esse terminal aberto. No PowerShell, configure a chave com `$env:API_KEY = 'local-demo-key'` antes de executar `npm start`.
+
+**Terminal 2 — enviar telemetria de teste (opcional):** na raiz do repositório, execute:
+
+```sh
+cd rtos
+API_KEY=local-demo-key make run
+```
+
+O painel deve atualizar com os sinais simulados. Pare cada processo com `Ctrl+C`. Este comando executa o cliente POSIX de integração atual; ainda não executa uma aplicação Trampoline/OIL.
+
+**Testes:** rode `npm test` dentro de `cluster/` e `make test` dentro de `rtos/`.
+
 ## 1. Objetivo
 
 Desenvolver um protótipo de painel automotivo (Instrument Cluster / ICM) que demonstre **controle determinístico baseado em tarefas de tempo real**, utilizando o **Trampoline RTOS** e sinais de veículo simulados.
 
-A proposta é entregar uma versão demonstrável sem veículo, ECU, sensores, rede CAN física ou painel automotivo real. O Trampoline será executado em uma plataforma POSIX no Linux; os sinais do veículo serão gerados por software; e o painel gráfico será executado em Python.
+A proposta é entregar uma versão demonstrável sem veículo, ECU, sensores, rede CAN física ou painel automotivo real. O Trampoline será executado em uma plataforma POSIX no Linux; os sinais do veículo serão gerados por software; e o painel gráfico será o front VOLT existente em `cluster/`.
 
 > **Escopo recomendado:** protótipo majoritariamente simulado, com o kernel Trampoline real executando na plataforma POSIX. Não é uma validação de ECU física nem uma comprovação de hard real-time em hardware automotivo.
+
+> **Ajuste de arquitetura:** o painel Node.js/HTML do diretório `cluster/` substitui a proposta anterior de dashboard Python. O produtor de telemetria em C enviará snapshots por HTTP para a API local do cluster; o servidor distribuirá as atualizações ao navegador via Server-Sent Events (SSE). Os sinais serão alinhados ao painel elétrico (EV).
+
+> **Estado da implementação:** `rtos/` contém o primeiro cliente POSIX em C e um teste ponta a ponta contra a API/SSE. Ele valida o contrato de integração, mas ainda não é uma aplicação Trampoline: `goil` não está instalado neste ambiente e a configuração OIL/tarefas ainda será adicionada.
 
 ## 2. Estratégia geral: construir um MVP
 
@@ -15,7 +43,7 @@ Para reduzir o tempo de desenvolvimento, priorizar os itens que demonstram melho
 1. Executar uma aplicação mínima do Trampoline RTOS na plataforma POSIX.
 2. Configurar tarefas, prioridades, alarmes, eventos e recursos por meio de OIL.
 3. Gerar sinais de veículo por software.
-4. Enviar telemetria do processo C para um dashboard Python via UDP local.
+4. Enviar telemetria do processo C para a API HTTP do cluster VOLT.
 5. Exibir instrumentos e indicadores de advertência.
 6. Registrar métricas de execução e resultados de testes.
 
@@ -24,51 +52,44 @@ Não é necessário implementar todo o conteúdo visual da referência. Um prot�
 ## 3. Arquitetura proposta
 
 ```text
-+----------------------------------------+
-|         Vehicle Signal Simulator       |
-|                                        |
-| Speed | RPM | Fuel | Coolant | Warnings|
-+-------------------+--------------------+
-                    |
-                    v
-+----------------------------------------+
-|       Simulated Vehicle / CAN Data     |
-|  Sinais fictícios com IDs e valores    |
-|  inspirados em mensagens CAN           |
-+-------------------+--------------------+
-                    |
-                    v
-+----------------------------------------+
-|             Trampoline RTOS            |
-|                                        |
-|  VehicleSimulationTask                 |
-|  DiagnosticsTask                       |
-|  WarningHandlerTask                    |
-|  TelemetryTask                         |
-|                                        |
-|  OIL | Alarms | Events | Resources      |
-|  Priorities | Scheduler                |
-+-------------------+--------------------+
-                    |
-             UDP localhost
-                    |
-                    v
-+----------------------------------------+
-|           Python Dashboard             |
-|                                        |
-| Speedometer | RPM | Fuel | Temperature |
-| Warning indicators | RTOS status       |
-+----------------------------------------+
++-----------------------------------+
+| Trampoline RTOS / aplicação C     |
+| Simulação | Diagnóstico | Alarmes  |
+| Eventos | Warning | Telemetria     |
++------------------+----------------+
+         |
+  snapshot EV validado
+         |
+         v
++-----------------------------------+
+| Cliente HTTP C (baixa prioridade) |
+| POST JSON + Bearer para loopback  |
++------------------+----------------+
+         |
+         v
++-----------------------------------+
+| Node.js: cluster/server.mjs       |
+| Validação | estado | API HTTP     |
++------------------+----------------+
+         |
+        SSE
+         |
+         v
++-----------------------------------+
+| Front VOLT: HTML/CSS/JavaScript   |
+| Velocidade | bateria | autonomia  |
+| Potência | marcha | alertas       |
++-----------------------------------+
 ```
 
 ### Separação de responsabilidades
 
-- **Trampoline RTOS / C:** executa a lógica periódica, diagnósticos, tratamento de eventos e preparação dos dados.
-- **Simulador:** gera entradas artificiais que representam os sinais do veículo.
-- **Comunicação UDP:** transporta os dados do processo C para a aplicação Python pela interface local (`127.0.0.1`).
-- **Python / Streamlit / Plotly:** apresenta os dados graficamente. A interface não faz parte do caminho crítico de execução do RTOS.
+- **Trampoline RTOS / C:** executa a simulação periódica, diagnósticos, tratamento de eventos e preparação dos snapshots de telemetria.
+- **Cliente HTTP C:** envia JSON para `http://127.0.0.1:3000/api/telemetry`, autenticado com `API_KEY` configurada no ambiente.
+- **Node.js:** valida os campos, mantém o estado em memória e publica atualizações em `/api/events`.
+- **Front VOLT:** renderiza as atualizações SSE; a interface não faz parte do caminho crítico do RTOS.
 
-É importante evitar que a atualização gráfica bloqueie tarefas críticas. A tarefa de telemetria deve ter prioridade baixa e utilizar envio não bloqueante ou uma estratégia simples de buffer, sempre que possível.
+Uma chamada HTTP síncrona pode bloquear. Não enviar da tarefa crítica nem manter um recurso compartilhado durante a chamada: manter a telemetria em baixa prioridade, definir timeout e, se necessário, transferir o snapshot para um worker POSIX fora do escalonador.
 
 ## 4. Ferramentas recomendadas
 
@@ -80,11 +101,11 @@ Não é necessário implementar todo o conteúdo visual da referência. Um prot�
 | Gerador de configuração | GOIL | Gerar estruturas e arquivos necessários à aplicação |
 | Ambiente de execução | POSIX / Linux | Executar a versão virtual do Trampoline |
 | Ambiente Windows | WSL2 + Ubuntu | Fornecer um ambiente Linux no computador Windows |
-| Dashboard | Python + Streamlit | Interface gráfica no navegador |
-| Gráficos | Plotly | Medidores e indicadores visuais |
-| Comunicação | UDP local | Transportar telemetria do C para Python |
+| Dashboard | Node.js + HTML/CSS/JavaScript | API e interface VOLT já existentes em `cluster/` |
+| Atualização do painel | Server-Sent Events (SSE) | Atualizações em tempo real no navegador |
+| Comunicação RTOS/UI | HTTP + JSON em loopback | POST autenticado para a API do cluster |
 | Controle de versão | Git + GitHub | Versionamento e evidências do projeto |
-| Testes e relatórios | Python / CSV / Markdown | Analisar métricas e registrar validação |
+| Testes e relatórios | C / Node.js / CSV / Markdown | Verificar integração e registrar medições |
 
 ### Observação sobre Windows e POSIX
 
@@ -96,11 +117,14 @@ Não serão necessários sensores físicos. Os sinais podem ser gerados por uma 
 
 | Sinal | Unidade / faixa sugerida | Uso no dashboard |
 |---|---:|---|
-| Vehicle Speed | 0–220 km/h | Velocímetro |
-| Engine RPM | 800–7.000 rpm | Tacômetro |
-| Fuel Level | 0–100% | Indicador de combustível |
-| Coolant Temperature | 70–120 °C | Indicador de temperatura |
-| Warning Status | Bitmask ou flags | Luzes de advertência |
+| Vehicle Speed | 0–260 km/h | Velocímetro |
+| Motor Power | -100–300 kW | Escala de regeneração/potência |
+| Battery | 0–100% | Indicador de bateria |
+| Range | 0–1000 km | Autonomia estimada |
+| Temperature | -40–100 °C | Temperatura exterior |
+| Gear | P, R, N, D, B | Marcha selecionada |
+| Odometer | 0–9999999 km | Hodômetro |
+| Indicators | booleanos | Setas, faróis, cinto e alerta |
 
 As faixas são valores didáticos para a demonstração; não representam limites de calibração de um veículo específico.
 
@@ -108,11 +132,11 @@ As faixas são valores didáticos para a demonstração; não representam limite
 
 | Cenário | Comportamento simulado | Resultado esperado |
 |---|---|---|
-| Normal Driving | Velocidade e RPM variam; combustível e temperatura permanecem em faixas normais | Painel sem advertências críticas |
-| Low Fuel | Combustível cai abaixo de 10% | Indicador de combustível baixo |
-| Engine Overheat | Temperatura ultrapassa 110 °C | Advertência de temperatura |
-| Engine Overspeed | RPM ultrapassa 6.000 rpm | Advertência de sobre-rotação |
-| Sensor Failure | Um sinal deixa de ser atualizado ou é marcado como inválido | Diagnóstico de falha de sinal |
+| Normal Driving | Velocidade e potência variam; bateria e autonomia diminuem gradualmente | Painel acompanha o estado via SSE |
+| Regeneration | Potência negativa dentro da faixa permitida | Escala de potência indica regeneração |
+| Low Battery | Bateria cai para uma faixa baixa definida pelo simulador | Indicador de bateria atualizado |
+| Vehicle Warning | Flag de alerta ou cinto é ativada | Indicador correspondente acende |
+| Sensor Failure | Um sinal é inválido ou deixa de atualizar | Diagnóstico registra falha e mantém/assinala o último estado válido |
 
 Para a primeira versão, os cenários podem ser selecionados por uma variável de configuração ou comando simples. Uma interface para selecionar cenários pode ser adicionada depois.
 
@@ -125,7 +149,7 @@ Uma configuração inicial possível é:
 | `VehicleSimulationTask` | 4 | Periódica, 100 ms | Atualizar os sinais simulados do veículo |
 | `DiagnosticsTask` | 3 | Periódica, 100 ms | Verificar limites e detectar falhas |
 | `WarningHandlerTask` | 5 | Por evento | Processar e atualizar o estado das advertências |
-| `TelemetryTask` | 2 | Periódica, 100 ms | Enviar dados para o dashboard via UDP |
+| `TelemetryTask` | 2 | Periódica, 100 ms | Enfileirar snapshot para envio HTTP fora do caminho crítico |
 
 **Importante:** as prioridades e os períodos acima são valores iniciais para o protótipo, não o resultado de uma análise formal de escalonabilidade. No Trampoline/OSEK, a prioridade mais alta corresponde ao maior valor numérico. Os valores devem ser revisados conforme o comportamento e as medições da aplicação.
 
@@ -143,53 +167,44 @@ Uma estrutura compartilhada em C pode armazenar os valores do veículo:
 
 ```c
 typedef struct {
-    float speed_kmh;
-    float engine_rpm;
-    float fuel_percent;
-    float coolant_temp_c;
-    unsigned int warning_flags;
-    unsigned int valid_signals;
+  float speed_kmh;
+  float power_kw;
+  float battery_percent;
+  float range_km;
+  char gear;
+  float temperature_c;
+  unsigned int odometer_km;
+  unsigned int indicators;
 } VehicleData;
 ```
 
 O acesso concorrente a essa estrutura deve ser protegido de acordo com os serviços e regras do Trampoline. Uma tarefa não deve manter um recurso ocupado durante operações demoradas, como comunicação ou espera.
 
-## 7. Comunicação entre Trampoline e dashboard
+## 7. Comunicação entre Trampoline e cluster VOLT
 
-A alternativa mais simples para o protótipo é usar UDP local.
+1. `TelemetryTask` copia um snapshot consistente dos dados do veículo.
+2. O cliente C envia um `POST` JSON autenticado para `http://127.0.0.1:3000/api/telemetry`.
+3. O servidor Node valida os campos e faixas, atualiza o estado e incrementa `sequence`.
+4. O servidor transmite o novo snapshot pelo endpoint SSE `/api/events`.
+5. O front VOLT existente renderiza os dados no navegador.
 
-1. `TelemetryTask` obtém uma cópia consistente dos dados do veículo.
-2. A aplicação C envia um pacote UDP para `127.0.0.1:5005`.
-3. Um pequeno processo Python recebe os pacotes.
-4. O dashboard Streamlit apresenta os valores recebidos.
+O payload deve usar exatamente o contrato da API: `speed`, `power`, `battery`, `range`, `gear`, `temperature`, `odometer`, `left`, `right`, `lights`, `seatbelt` e `warning`. Os limites e tipos estão documentados em [`cluster/README.md`](cluster/README.md). O servidor gera `updatedAt` e `sequence`; o produtor não deve enviá-los.
 
-Exemplo ilustrativo do payload em JSON:
+O cliente usa `Authorization: Bearer API_KEY`. Configure a chave no ambiente do processo produtor e nunca no JavaScript do navegador ou em arquivo versionado. Para desenvolvimento, mantenha o servidor e o produtor no mesmo computador, usando loopback.
 
-```json
-{
-  "speed": 98,
-  "rpm": 3200,
-  "fuel": 65,
-  "coolant": 92,
-  "warning": 0
-}
-```
-
-O JSON é apenas um exemplo de formato. A implementação pode utilizar uma estrutura binária ou texto delimitado para simplificar o envio em C. O processo Python deve validar os dados recebidos e lidar com ausência ou atraso de mensagens.
+O envio HTTP pode bloquear por até o timeout configurado. Não fazer a chamada mantendo um recurso compartilhado nem em tarefa crítica; usar tarefa de baixa prioridade ou worker POSIX separado. Uma falha de envio não deve parar a simulação/diagnóstico.
 
 ## 8. Dashboard / Instrument Cluster
 
-O dashboard pode ser desenvolvido em Python com Streamlit e Plotly, sem criar uma interface gráfica dentro do RTOS.
+O dashboard da demonstração é o front VOLT existente em `cluster/public/`; não criar uma segunda interface em Python para este fluxo.
 
 ### Elementos visuais mínimos
 
-- Velocímetro analógico ou digital.
-- Tacômetro (RPM).
-- Indicador de combustível.
-- Indicador de temperatura do líquido de arrefecimento.
-- Luzes de advertência.
-- Estado de comunicação / última atualização recebida.
-- Estado simplificado das tarefas, quando essa informação for exportada pelo código C.
+- Velocidade e marcha.
+- Bateria, autonomia e potência/regeneração.
+- Temperatura exterior e odômetro.
+- Indicadores de seta, faróis, cinto e alerta.
+- Estado de conexão e idade da última telemetria.
 
 ### Sugestão de layout
 
@@ -197,16 +212,12 @@ O dashboard pode ser desenvolvido em Python com Streamlit e Plotly, sem criar um
 +----------------------------------------------------------+
 |                 AUTOMOTIVE DASHBOARD                     |
 +----------------------+----------------------+------------+
-|                      |                      |            |
-|     SPEEDOMETER      |      TACHOMETER      |   FUEL     |
-|       98 km/h        |       3200 rpm       |    65%     |
-|                      |                      |            |
+|  SPEED  | BATTERY | RANGE | POWER / REGEN | GEAR       |
+|  98 km/h|  65%    | 240km | 32 kW         | D          |
 +----------------------+----------------------+------------+
-|             COOLANT TEMPERATURE: 92 °C                   |
+| TEMPERATURE | ODOMETER | LIGHTS | SEATBELT | WARNING    |
 +----------------------------------------------------------+
-|  ABS  |  ENGINE  |  LOW FUEL  |  OVERHEAT  |  SENSOR     |
-+----------------------------------------------------------+
-| RTOS: RUNNING       COMMUNICATION: OK       SCENARIO: NORM|
+| RTOS: RUNNING       CONNECTION: OK       UPDATED: <1 s   |
 +----------------------------------------------------------+
 ```
 
@@ -274,20 +285,20 @@ automotive-dashboard/
 |
 +-- rtos/
 |   +-- vehicle_dashboard.oil
-|   +-- vehicle_dashboard.c
 |   +-- vehicle_simulator.c
 |   +-- diagnostics.c
 |   +-- warning_handler.c
-|   +-- communication.c
+|   +-- cluster_client.c
+|   +-- Makefile
 |
-+-- dashboard/
-|   +-- app.py
-|   +-- receiver.py
-|   +-- requirements.txt
++-- cluster/
+|   +-- server.mjs
+|   +-- public/
+|   +-- test.mjs
 |
 +-- tests/
-|   +-- test_diagnostics.py
-|   +-- test_timing.py
+|   +-- test_diagnostics.c
+|   +-- test_cluster_integration.mjs
 |
 +-- reports/
 |   +-- timing_report.csv
@@ -321,18 +332,18 @@ A organização pode ser simplificada se o protótipo ficar pequeno. O important
 
 ### Etapa 3 — Implementar os sinais simulados
 
-- Gerar velocidade, RPM, combustível e temperatura.
-- Implementar os cenários Normal Driving, Low Fuel, Engine Overheat, Engine Overspeed e Sensor Failure.
+- Gerar velocidade, potência, bateria, autonomia, marcha e temperatura compatíveis com o cluster VOLT.
+- Implementar cenários de condução normal, regeneração, bateria baixa e falha de sinal.
 - Implementar a lógica de diagnóstico.
 
 **Critério de conclusão:** valores mudam conforme o cenário e as falhas são detectadas.
 
 ### Etapa 4 — Implementar comunicação e dashboard
 
-- Implementar envio UDP a partir da aplicação C.
-- Criar o receptor Python.
-- Criar os indicadores do dashboard com Streamlit e Plotly.
-- Exibir o estado da comunicação.
+- Implementar o cliente HTTP C para `POST /api/telemetry`, com Bearer key, validação local e timeout.
+- Reutilizar o servidor Node e o front VOLT em `cluster/`; o servidor já distribui estado via SSE.
+- Manter chamadas de rede fora de tarefas críticas e de seções protegidas por recurso.
+- Exibir e validar estado de conexão/idade da telemetria no painel.
 
 **Critério de conclusão:** o dashboard exibe os valores enviados pela aplicação Trampoline.
 
@@ -391,7 +402,7 @@ goil --target=posix/linux --templates=../../../goil/templates/ one_task.oil
 - Protótipo C executando com Trampoline RTOS na plataforma POSIX.
 - Arquivo OIL com a configuração estática dos objetos do RTOS.
 - Simulador de sinais do veículo.
-- Dashboard gráfico integrado via UDP local.
+- Cliente C integrado à API HTTP do cluster VOLT, com atualização do browser via SSE.
 - Cenários de falha demonstráveis.
 - Código de testes e logs.
 - `timing_report.csv` com medições observadas.
@@ -407,6 +418,7 @@ goil --target=posix/linux --templates=../../../goil/templates/ one_task.oil
 - [ ] O acesso aos dados compartilhados está protegido quando necessário.
 - [ ] Os sinais do veículo são gerados por software.
 - [ ] O dashboard recebe e exibe os dados reais enviados pelo processo C.
+- [ ] A transmissão HTTP tem timeout e não bloqueia tarefas críticas nem mantém recurso compartilhado.
 - [ ] Os cenários de falha acionam os indicadores correspondentes.
 - [ ] Há medições de execução, periodicidade, jitter e deadline misses.
 - [ ] O relatório diferencia resultados POSIX de garantias de uma ECU física.
