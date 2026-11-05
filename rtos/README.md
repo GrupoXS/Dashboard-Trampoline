@@ -1,8 +1,8 @@
-# POSIX telemetry prototype
+# Trampoline POSIX vehicle dashboard
 
-This is the first integration slice between a C telemetry producer and the existing VOLT cluster API. It simulates electric-vehicle signals and sends the cluster's current JSON schema to `POST /api/telemetry`; the Node server then forwards updates to the browser through SSE.
+The directory contains both the original standalone integration probe and a Trampoline POSIX application. The Trampoline application simulates vehicle signals in periodic tasks, runs diagnostics, signals warnings with an OSEK event, and snapshots telemetry for a separate POSIX worker to send to the VOLT cluster API. Blocking HTTP never runs in an RTOS task or while a Trampoline resource is held.
 
-> This standalone POSIX simulator is an integration probe, not yet a Trampoline RTOS application. The local environment does not currently have `goil`; OIL configuration and Trampoline tasks are the next implementation phase after validating the official POSIX toolchain.
+> The Trampoline application is configured in `vehicle_dashboard.oil`. Its build requires a separately installed Trampoline checkout and GOIL; this environment does not currently have `goil`, so the generated RTOS binary cannot be validated here.
 
 ## Requirements
 
@@ -19,6 +19,19 @@ make test
 ```
 
 The test compiles the C producer into a temporary directory, starts the existing Node server on an ephemeral loopback port, sends one authenticated telemetry snapshot, and verifies both the API state and SSE event. No API key or running server is required.
+
+## Build and run the Trampoline application
+
+Install/build GOIL and the Trampoline POSIX runtime as described in the [official Trampoline documentation](https://github.com/TrampolineRTOS/trampoline). Then, from `rtos/`, provide the absolute path to that checkout:
+
+```sh
+make trampoline-build TRAMPOLINE_PATH=/path/to/trampoline
+API_KEY=local-demo-key make trampoline-run TRAMPOLINE_PATH=/path/to/trampoline
+```
+
+Start the cluster server first. The OIL configuration schedules signal simulation and diagnostics every 100 ms and requests telemetry every second. The worker retains only the newest pending snapshot if network delivery is slower than the producer. `WarningHandlerTask` waits for `WarningEvent`; normal diagnostic checks leave the warning clear, while out-of-range values set the warning and signal the handler.
+
+`make run` remains the original standalone POSIX integration probe; it does not use Trampoline.
 
 ## Run the simulator against the browser dashboard
 

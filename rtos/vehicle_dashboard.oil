@@ -1,0 +1,77 @@
+OIL_VERSION = "2.5";
+
+CPU vehicle_dashboard {
+  OS config {
+    STATUS = EXTENDED;
+    BUILD = TRUE {
+      APP_SRC = "trampoline_app.c cluster_client.c";
+      TRAMPOLINE_BASE_PATH = "$(TRAMPOLINE_PATH)";
+      APP_NAME = "vehicle-dashboard";
+      LINKER = "gcc";
+      SYSTEM = PYTHON;
+    };
+  };
+
+  APPMODE stdAppmode {};
+
+  RESOURCE VehicleDataResource { RESOURCEPROPERTY = STANDARD; };
+
+  EVENT WarningEvent;
+
+  COUNTER SystemCounter {
+    MINCYCLE = 1;
+    MAXALLOWEDVALUE = 10000;
+    TICKSPERBASE = 1;
+  };
+
+  TASK VehicleSimulationTask {
+    PRIORITY = 4;
+    SCHEDULE = FULL;
+    ACTIVATION = 1;
+    AUTOSTART = TRUE { APPMODE = stdAppmode; };
+    RESOURCE = VehicleDataResource;
+  };
+
+  TASK DiagnosticsTask {
+    PRIORITY = 3;
+    SCHEDULE = FULL;
+    ACTIVATION = 1;
+    AUTOSTART = TRUE { APPMODE = stdAppmode; };
+    RESOURCE = VehicleDataResource;
+  };
+
+  TASK WarningHandlerTask {
+    PRIORITY = 5;
+    SCHEDULE = FULL;
+    TYPE = EXTENDED;
+    ACTIVATION = 1;
+    AUTOSTART = TRUE { APPMODE = stdAppmode; };
+    EVENT = WarningEvent;
+  };
+
+  TASK TelemetryTask {
+    PRIORITY = 1;
+    SCHEDULE = FULL;
+    ACTIVATION = 1;
+    AUTOSTART = TRUE { APPMODE = stdAppmode; };
+    RESOURCE = VehicleDataResource;
+  };
+
+  ALARM SimulationAlarm {
+    COUNTER = SystemCounter;
+    ACTION = ACTIVATETASK { TASK = VehicleSimulationTask; };
+    AUTOSTART = TRUE { APPMODE = stdAppmode; ALARMTIME = 1; CYCLETIME = 10; };
+  };
+
+  ALARM DiagnosticsAlarm {
+    COUNTER = SystemCounter;
+    ACTION = ACTIVATETASK { TASK = DiagnosticsTask; };
+    AUTOSTART = TRUE { APPMODE = stdAppmode; ALARMTIME = 2; CYCLETIME = 10; };
+  };
+
+  ALARM TelemetryAlarm {
+    COUNTER = SystemCounter;
+    ACTION = ACTIVATETASK { TASK = TelemetryTask; };
+    AUTOSTART = TRUE { APPMODE = stdAppmode; ALARMTIME = 10; CYCLETIME = 100; };
+  };
+};

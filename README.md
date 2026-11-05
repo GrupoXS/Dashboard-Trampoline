@@ -20,7 +20,7 @@ cd rtos
 API_KEY=local-demo-key make run
 ```
 
-O painel deve atualizar com os sinais simulados. Pare cada processo com `Ctrl+C`. Este comando executa o cliente POSIX de integração atual; ainda não executa uma aplicação Trampoline/OIL.
+O painel deve atualizar com os sinais simulados. Pare cada processo com `Ctrl+C`. Este comando executa o cliente POSIX de integração. A aplicação Trampoline POSIX está configurada em `rtos/vehicle_dashboard.oil`; para compilá-la, consulte [`rtos/README.md`](rtos/README.md) e forneça o caminho da instalação Trampoline.
 
 **Testes:** rode `npm test` dentro de `cluster/` e `make test` dentro de `rtos/`.
 
