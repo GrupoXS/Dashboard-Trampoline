@@ -40,5 +40,6 @@ export function createServer(key){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
  const key=process.env.API_KEY||randomBytes(24).toString('hex');
- createServer(key).listen(Number(process.env.PORT||3000),process.env.HOST||'127.0.0.1',()=>{console.log('Volt Cluster: http://localhost:3000');if(!process.env.API_KEY)console.log(`Chave temporária da API: ${key}`);});
+ const port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1';
+ createServer(key).listen(port,host,()=>{console.log(`Volt Cluster: http://${host}:${port}`);if(!process.env.API_KEY)console.log(`Chave temporária da API: ${key}`);});
 }

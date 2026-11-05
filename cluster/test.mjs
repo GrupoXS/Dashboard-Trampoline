@@ -21,7 +21,8 @@ test('HTTP, autenticação, validação e transmissão SSE',async()=>{
 
 test('entrypoint inicia e serve o site',async()=>{
  const probe=createTcpServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise((r,j)=>probe.close(e=>e?j(e):r()));
- const child=spawn(process.execPath,[fileURLToPath(new URL('./server.mjs',import.meta.url))],{env:{...process.env,HOST:'127.0.0.1',PORT:String(port),API_KEY:'startup-test-secret'},stdio:['ignore','pipe','pipe']});
+ const serverFile=fileURLToPath(new URL('./server.mjs',import.meta.url));
+ const child=spawn(process.execPath,[serverFile],{env:{...process.env,HOST:'127.0.0.1',PORT:String(port),API_KEY:'startup-test-secret'},stdio:['ignore','pipe','pipe']});
  let stderr='';child.stderr.setEncoding('utf8');child.stderr.on('data',chunk=>{stderr+=chunk;});
  const url=`http://127.0.0.1:${port}`;
  try{
