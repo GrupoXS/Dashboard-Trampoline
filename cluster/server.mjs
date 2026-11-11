@@ -1,8 +1,6 @@
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,timingSafeEqual} from 'node:crypto';
-import {resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
 export const defaults={speed:0,power:0,battery:82,range:328,gear:'P',temperature:24,odometer:12480,left:false,right:false,lights:false,seatbelt:false,warning:false};
 export function validate(input){
  if(!input||typeof input!=='object'||Array.isArray(input)||!Object.keys(input).length)throw Error('Envie um objeto JSON com ao menos um campo.');
@@ -38,8 +36,7 @@ export function createServer(key){
  }json(404,{error:'Rota não encontrada'});
  });return server;
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
+if(process.argv[1]&&import.meta.url===new URL(`file:///${process.argv[1].replaceAll('\\','/')}`).href){
  const key=process.env.API_KEY||randomBytes(24).toString('hex');
- const port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1';
- createServer(key).listen(port,host,()=>{console.log(`Volt Cluster: http://${host}:${port}`);if(!process.env.API_KEY)console.log(`Chave temporária da API: ${key}`);});
+ createServer(key).listen(Number(process.env.PORT||3000),process.env.HOST||'127.0.0.1',()=>{console.log('Volt Cluster: http://localhost:3000');if(!process.env.API_KEY)console.log(`Chave temporária da API: ${key}`);});
 }
